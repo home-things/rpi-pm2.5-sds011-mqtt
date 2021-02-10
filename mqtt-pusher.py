@@ -68,10 +68,12 @@ def process_data(d):
     pm10 = r[1]/10.0
     #checksum = sum(ord(v) for v in d[2:8])%256
     checksum = sum(v for v in d[2:8])
-    print('process data', r, pm2_5, pm10)
-    # TODO: verify checksum
-    return [pm2_5, pm10]
-    #print("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm2_5, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
+    if checksum == d[8]:
+        print('process data', r, pm2_5, pm10)
+        # TODO: verify checksum
+        return [pm2_5, pm10]
+    else:
+        print('process data', 'CRC=NOK', checksum, d[8])
 
 def process_version(d):
     r = struct.unpack('<BBBHBB', d[3:])
@@ -170,14 +172,17 @@ if __name__ == "__main__":
     cmd_set_working_period(PERIOD_CONTINUOUS)
     cmd_set_mode(MODE_QUERY)
     print("sds011 initialized!")
-    skip_vals = 15 if not DEBUG else 2
+    skip_vals = 3 if not DEBUG else 1
+    result_values = None
     while True:
         if not is_mqtt_connected: continue 
         cmd_set_sleep(0)
         for t in range(skip_vals):
             values = cmd_query_data();
-            print('values', values, 't', t, '/', skip_vals)
+            if DEBUG:
+                print('values', values, 't', t, '/', skip_vals)
             if values is not None and len(values) == 2:
+                result_values = values
                 print("skip: PM2.5: ", values[0], ", PM10: ", values[1])
                 time.sleep(2)
 
@@ -195,7 +200,7 @@ if __name__ == "__main__":
         #    data.pop(0)
 
         # append new values
-        jsonrow = {'pm2_5': values[0], 'pm10': values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
+        jsonrow = {'pm2_5': result_values[0], 'pm10': result_values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
         #data.append(jsonrow)
 
         ## save it
