@@ -4,6 +4,7 @@
 # https://gist.github.com/kadamski/92653913a53baf9dd1a8
 #from __future__ import print_function
 import serial, struct, sys, time, json #, subprocess
+import paho.mqtt.client as mqtt
 
 DEBUG = 0
 CMD_MODE = 2
@@ -17,7 +18,7 @@ MODE_QUERY = 1
 PERIOD_CONTINUOUS = 0
 
 MQTT_HOST = '192.168.1.68'
-MQTT_TOPIC = '/weather/pm/bedroom'
+MQTT_TOPIC = '/bedroom/weather/pm'
 
 ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
@@ -27,6 +28,13 @@ ser.open()
 ser.flushInput()
 
 byte, data = 0, ""
+
+def now():
+    return datetime.now()
+
+def now_minute():
+    return now().replace(second=0, microsecond=0)
+
 
 def dump(d, prefix=''):
     print(prefix + ' '.join(x.encode('hex') for x in d))
@@ -101,11 +109,30 @@ def cmd_set_id(id):
     read_response()
 
 def pub_mqtt(jsonrow):
-    cmd = ['mosquitto_pub', '-h', MQTT_HOST, '-t', MQTT_TOPIC, '-s']
-    print('Publishing using:', cmd)
-    with subprocess.Popen(cmd, shell=False, bufsize=0, stdin=subprocess.PIPE).stdin as f:
-        json.dump(jsonrow, f)
+    #cmd = ['mosquitto_pub', '-h', MQTT_HOST, '-t', MQTT_TOPIC, '-s']
+    #print('Publishing using:', cmd)
+    #with subprocess.Popen(cmd, shell=False, bufsize=0, stdin=subprocess.PIPE).stdin as f:
+    #    json.dump(jsonrow, f)
+    mqttc.publish(MQTT_TOPIC, json.dump(jsonrow, f), retain=True)
 
+def on_connect(mqttc, userdata, flags, rc):
+    global is_mqtt_connected
+
+    print("Connected with result code "+str(rc))
+    #print(f"[mqtt] subscribing... {MQTT_TOPIC_CMD}")
+    #mqttc.subscribe(MQTT_TOPIC_CMD)
+    #mqttc.subscribe(MQTT_TOPIC_SW_CMD)
+    #print("[mqtt] subscribed")
+    is_mqtt_connected = True
+
+mqttc.enable_logger(logger=None)
+mqttc.on_connect = on_connect
+#mqttc.on_message = on_message
+print("[mqtt] connecting...")
+mqttc.connect(MQTT_HOST)
+
+# mqttc.loop_forever()
+mqttc.loop_start() # loop thread
 
 if __name__ == "__main__":
     cmd_set_sleep(0)
@@ -113,6 +140,7 @@ if __name__ == "__main__":
     cmd_set_working_period(PERIOD_CONTINUOUS)
     cmd_set_mode(MODE_QUERY);
     while True:
+        if not is_mqtt_connected: continue 
         cmd_set_sleep(0)
         for t in range(15):
             values = cmd_query_data();
