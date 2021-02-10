@@ -32,4 +32,8 @@ https://github.com/zefanja/aqi
 ----
 
 
+#### raw debug data and mqtt sniffer
 ![photo_2021-02-10_21-43-39](https://user-images.githubusercontent.com/6201068/107556188-25c2af80-6be9-11eb-966e-0cc1ef88e148.jpg)
+
+#### Home Assistant built-in sensor widget
+![IMG_1256](https://user-images.githubusercontent.com/6201068/107560307-3fb2c100-6bee-11eb-91c1-240e69062289.png)
