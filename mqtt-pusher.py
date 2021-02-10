@@ -18,10 +18,10 @@ MODE_ACTIVE = 0
 MODE_QUERY = 1
 PERIOD_CONTINUOUS = 0
 
-MQTT_HOST = '192.168.1.68'
+# Hey, If you don't want to fork it, let's create env variable config
+MQTT_HOST = '192.168.1.68' 
 MQTT_TOPIC = '/bedroom/weather/pm'
 
-#ser = serial.Serial(, 9600, bytesize=serial.EIGHTBITS, timeout=3)
 ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
 ser.baudrate = 9600
