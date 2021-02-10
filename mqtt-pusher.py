@@ -3,10 +3,11 @@
 # "DATASHEET": http://cl.ly/ekot
 # https://gist.github.com/kadamski/92653913a53baf9dd1a8
 #from __future__ import print_function
-import serial, struct, sys, time, json #, subprocess
+import serial, struct, sys, time, json, codecs #, subprocess
 import paho.mqtt.client as mqtt
+from pprint import pprint
 
-DEBUG = 0
+DEBUG = True
 CMD_MODE = 2
 CMD_QUERY_DATA = 4
 CMD_DEVICE_ID = 5
@@ -20,14 +21,21 @@ PERIOD_CONTINUOUS = 0
 MQTT_HOST = '192.168.1.68'
 MQTT_TOPIC = '/bedroom/weather/pm'
 
+#ser = serial.Serial(, 9600, bytesize=serial.EIGHTBITS, timeout=3)
 ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
 ser.baudrate = 9600
+ser.timeout = 3
 
 ser.open()
 ser.flushInput()
 
 byte, data = 0, ""
+
+
+print("[mqtt] initing...")
+mqttc = mqtt.Client(client_id = MQTT_TOPIC, clean_session = False)
+
 
 def now():
     return datetime.now()
@@ -37,7 +45,10 @@ def now_minute():
 
 
 def dump(d, prefix=''):
-    print(prefix + ' '.join(x.encode('hex') for x in d))
+    print(prefix + ' '.join(str(x) if type(x) == int else codecs.encode(x.encode('utf8'), 'hex').decode('ascii') for x in d))
+    #codecs.encode(x, 'hex').encode('binascii')
+    #pprint(codecs.encode(d[0].encode('utf8'), 'hex'))
+    
 
 def construct_command(cmd, data=[]):
     assert len(data) <= 12
@@ -49,26 +60,37 @@ def construct_command(cmd, data=[]):
 
     if DEBUG:
         dump(ret, '> ')
-    return ret
+    return ret.encode()
 
 def process_data(d):
     r = struct.unpack('<HHxxBB', d[2:])
-    pm25 = r[0]/10.0
+    pm2_5 = r[0]/10.0
     pm10 = r[1]/10.0
-    checksum = sum(ord(v) for v in d[2:8])%256
+    #checksum = sum(ord(v) for v in d[2:8])%256
+    checksum = sum(v for v in d[2:8])
+    print('process data', r, pm2_5, pm10)
     # TODO: verify checksum
-    return [pm25, pm10]
-    #print("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm25, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
+    return [pm2_5, pm10]
+    #print("PM 2.5: {} μg/m^3  PM 10: {} μg/m^3 CRC={}".format(pm2_5, pm10, "OK" if (checksum==r[2] and r[3]==0xab) else "NOK"))
 
 def process_version(d):
     r = struct.unpack('<BBBHBB', d[3:])
-    checksum = sum(ord(v) for v in d[2:8])%256
+    #checksum = sum(ord(v) for v in d[2:8])%256
+    checksum = sum(v for v in d[2:8])
     print("Y: {}, M: {}, D: {}, ID: {}, CRC={}".format(r[0], r[1], r[2], hex(r[3]), "OK" if (checksum==r[4] and r[5]==0xab) else "NOK"))
 
 def read_response():
+    if DEBUG:
+        print('in buffer', ser.in_waiting, 'out buffer', ser.out_waiting)
+    ser.flush()
+    ser.flushInput()
+    if DEBUG:
+        print('in buffer', ser.in_waiting, 'out buffer', ser.out_waiting)
     byte = 0
-    while byte != "\xaa":
+    while byte != b"\xaa":
         byte = ser.read(size=1)
+        if DEBUG:
+            print('<skip:', byte)
 
     d = ser.read(size=9)
 
@@ -83,8 +105,11 @@ def cmd_set_mode(mode=MODE_QUERY):
 def cmd_query_data():
     ser.write(construct_command(CMD_QUERY_DATA))
     d = read_response()
+    if DEBUG:
+        print('resp')
+        pprint(d[1])
     values = []
-    if d[1] == "\xc0":
+    if d[1] == 192: #b"\xc0":
         values = process_data(d)
     return values
 
@@ -98,6 +123,8 @@ def cmd_set_working_period(period):
     read_response()
 
 def cmd_firmware_ver():
+    print("checking version")
+    ser.flushInput()
     ser.write(construct_command(CMD_FIRMWARE))
     d = read_response()
     process_version(d)
@@ -113,12 +140,12 @@ def pub_mqtt(jsonrow):
     #print('Publishing using:', cmd)
     #with subprocess.Popen(cmd, shell=False, bufsize=0, stdin=subprocess.PIPE).stdin as f:
     #    json.dump(jsonrow, f)
-    mqttc.publish(MQTT_TOPIC, json.dump(jsonrow, f), retain=True)
+    mqttc.publish(MQTT_TOPIC, json.dumps(jsonrow), retain=True)
 
 def on_connect(mqttc, userdata, flags, rc):
     global is_mqtt_connected
 
-    print("Connected with result code "+str(rc))
+    print("Connected to mqtt with result code "+str(rc))
     #print(f"[mqtt] subscribing... {MQTT_TOPIC_CMD}")
     #mqttc.subscribe(MQTT_TOPIC_CMD)
     #mqttc.subscribe(MQTT_TOPIC_SW_CMD)
@@ -135,18 +162,26 @@ mqttc.connect(MQTT_HOST)
 mqttc.loop_start() # loop thread
 
 if __name__ == "__main__":
+    print("start sds011 loopback...")
+
     cmd_set_sleep(0)
+    print("initialize sds011...")
     cmd_firmware_ver()
     cmd_set_working_period(PERIOD_CONTINUOUS)
-    cmd_set_mode(MODE_QUERY);
+    cmd_set_mode(MODE_QUERY)
+    print("sds011 initialized!")
+    skip_vals = 15 if not DEBUG else 2
     while True:
         if not is_mqtt_connected: continue 
         cmd_set_sleep(0)
-        for t in range(15):
+        for t in range(skip_vals):
             values = cmd_query_data();
+            print('values', values, 't', t, '/', skip_vals)
             if values is not None and len(values) == 2:
-              print("PM2.5: ", values[0], ", PM10: ", values[1])
-              time.sleep(2)
+                print("skip: PM2.5: ", values[0], ", PM10: ", values[1])
+                time.sleep(2)
+
+        print('lets go')
 
         ## open stored data
         #try:
@@ -160,7 +195,7 @@ if __name__ == "__main__":
         #    data.pop(0)
 
         # append new values
-        jsonrow = {'pm25': values[0], 'pm10': values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
+        jsonrow = {'pm2_5': values[0], 'pm10': values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
         #data.append(jsonrow)
 
         ## save it
