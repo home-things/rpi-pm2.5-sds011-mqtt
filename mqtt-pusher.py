@@ -7,7 +7,7 @@ import serial, struct, sys, time, json, codecs #, subprocess
 import paho.mqtt.client as mqtt
 from pprint import pprint
 
-DEBUG = True
+DEBUG = False
 CMD_MODE = 2
 CMD_QUERY_DATA = 4
 CMD_DEVICE_ID = 5
