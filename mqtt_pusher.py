@@ -17,6 +17,7 @@ CMD_WORKING_PERIOD = 8
 MODE_ACTIVE = 0
 MODE_QUERY = 1
 PERIOD_CONTINUOUS = 0
+CRC_MAX = 256
 
 # Hey, If you don't want to fork it, let's create env variable config
 MQTT_HOST = '192.168.1.68' 
@@ -68,18 +69,20 @@ def process_data(d):
     pm10 = r[1]/10.0
     #checksum = sum(ord(v) for v in d[2:8])%256
     checksum = sum(v for v in d[2:8])
-    if checksum == d[8]:
+    if checksum % CRC_MAX == d[8]:
         print('process data', r, pm2_5, pm10)
         # TODO: verify checksum
         return [pm2_5, pm10]
     else:
-        print('process data', 'CRC=NOK', checksum, d[8])
+        print('process data', 'CRC=NOK', checksum, d[8], [pm2_5, pm10])
 
 def process_version(d):
     r = struct.unpack('<BBBHBB', d[3:])
     #checksum = sum(ord(v) for v in d[2:8])%256
-    checksum = sum(v for v in d[2:8])
+    checksum = sum(v for v in d[2:8]) % CRC_MAX
     print("Y: {}, M: {}, D: {}, ID: {}, CRC={}".format(r[0], r[1], r[2], hex(r[3]), "OK" if (checksum==r[4] and r[5]==0xab) else "NOK"))
+    if checksum != r[4]:
+        print('NOK:', checksum, r[4])
 
 def read_response():
     if DEBUG:
@@ -174,6 +177,7 @@ if __name__ == "__main__":
     print("sds011 initialized!")
     skip_vals = 3 if not DEBUG else 1
     result_values = None
+
     while True:
         if not is_mqtt_connected: continue 
         cmd_set_sleep(0)
@@ -186,30 +190,34 @@ if __name__ == "__main__":
                 print("skip: PM2.5: ", values[0], ", PM10: ", values[1])
                 time.sleep(2)
 
-        print('lets go')
+        if result_values:
+            print('sending...')
 
-        ## open stored data
-        #try:
-        #    with open(JSON_FILE) as json_data:
-        #        data = json.load(json_data)
-        #except IOError as e:
-        #    data = []
+            ## open stored data
+            #try:
+            #    with open(JSON_FILE) as json_data:
+            #        data = json.load(json_data)
+            #except IOError as e:
+            #    data = []
 
-        ## check if length is more than 100 and delete first element
-        #if len(data) > 100:
-        #    data.pop(0)
+            ## check if length is more than 100 and delete first element
+            #if len(data) > 100:
+            #    data.pop(0)
 
-        # append new values
-        jsonrow = {'pm2_5': result_values[0], 'pm10': result_values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
-        #data.append(jsonrow)
+            # append new values
+            jsonrow = {'pm2_5': result_values[0], 'pm10': result_values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
+            #data.append(jsonrow)
 
-        ## save it
-        #with open(JSON_FILE, 'w') as outfile:
-        #    json.dump(data, outfile)
+            ## save it
+            #with open(JSON_FILE, 'w') as outfile:
+            #    json.dump(data, outfile)
 
-        if MQTT_HOST != '':
-            pub_mqtt(jsonrow)
-            
-        print("Going to sleep for 1 min...")
+            if MQTT_HOST != '':
+                print(jsonrow)
+                pub_mqtt(jsonrow)
+                
+        else:
+            print('reading is failed')
+        print("Going to sleep for a while...")
         cmd_set_sleep(1)
-        time.sleep(60)
+        time.sleep(60 if result_values else 1)
