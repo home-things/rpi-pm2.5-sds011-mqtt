@@ -22,7 +22,7 @@ CRC_MAX = 256
 # Hey, If you don't want to fork it, let's create env variable config
 MQTT_HOST = '192.168.1.68' # 'rpi4.local'
 
-MQTT_TOPIC = '/bedroom/weather/pm'
+MQTT_TOPIC = '/hall/weather/pm'
 
 ser = serial.Serial()
 ser.port = "/dev/ttyUSB0"
