@@ -43,3 +43,11 @@ cron
 ```
 @reboot sleep 80; cd /home/pi/services/air-quality-pm2.5-sds011; python3 mqtt_pusher.py >log
 ```
+pip
+```
+pip3 install pyserial adafruit-io
+```
+apt
+```
+sudo apt update && sudo apt install python3-paho-mqtt
+```
