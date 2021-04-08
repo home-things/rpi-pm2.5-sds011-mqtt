@@ -37,3 +37,9 @@ https://github.com/zefanja/aqi
 
 #### Home Assistant built-in sensor widget
 ![IMG_1256](https://user-images.githubusercontent.com/6201068/107560307-3fb2c100-6bee-11eb-91c1-240e69062289.png)
+
+# other settings
+cron
+```
+@reboot sleep 80; cd /home/pi/services/air-quality-pm2.5-sds011; python3 mqtt_pusher.py >log
+```
