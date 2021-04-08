@@ -20,7 +20,8 @@ PERIOD_CONTINUOUS = 0
 CRC_MAX = 256
 
 # Hey, If you don't want to fork it, let's create env variable config
-MQTT_HOST = '192.168.1.68' 
+MQTT_HOST = '192.168.1.68' # 'rpi4.local'
+
 MQTT_TOPIC = '/bedroom/weather/pm'
 
 ser = serial.Serial()
@@ -180,44 +181,48 @@ if __name__ == "__main__":
 
     while True:
         if not is_mqtt_connected: continue 
-        cmd_set_sleep(0)
-        for t in range(skip_vals):
-            values = cmd_query_data();
-            if DEBUG:
-                print('values', values, 't', t, '/', skip_vals)
-            if values is not None and len(values) == 2:
-                result_values = values
-                print("skip: PM2.5: ", values[0], ", PM10: ", values[1])
-                time.sleep(2)
+        try:
+            cmd_set_sleep(0)
+            for t in range(skip_vals):
+                values = cmd_query_data();
+                if DEBUG:
+                    print('values', values, 't', t, '/', skip_vals)
+                if values is not None and len(values) == 2:
+                    result_values = values
+                    print("skip: PM2.5: ", values[0], ", PM10: ", values[1])
+                    time.sleep(2)
 
-        if result_values:
-            print('sending...')
+            if result_values:
+                print('sending...')
 
-            ## open stored data
-            #try:
-            #    with open(JSON_FILE) as json_data:
-            #        data = json.load(json_data)
-            #except IOError as e:
-            #    data = []
+                ## open stored data
+                #try:
+                #    with open(JSON_FILE) as json_data:
+                #        data = json.load(json_data)
+                #except IOError as e:
+                #    data = []
 
-            ## check if length is more than 100 and delete first element
-            #if len(data) > 100:
-            #    data.pop(0)
+                ## check if length is more than 100 and delete first element
+                #if len(data) > 100:
+                #    data.pop(0)
 
-            # append new values
-            jsonrow = {'pm2_5': result_values[0], 'pm10': result_values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
-            #data.append(jsonrow)
+                # append new values
+                jsonrow = {'pm2_5': result_values[0], 'pm10': result_values[1], 'time': time.strftime("%d.%m.%Y %H:%M:%S")}
+                #data.append(jsonrow)
 
-            ## save it
-            #with open(JSON_FILE, 'w') as outfile:
-            #    json.dump(data, outfile)
+                ## save it
+                #with open(JSON_FILE, 'w') as outfile:
+                #    json.dump(data, outfile)
 
-            if MQTT_HOST != '':
-                print(jsonrow)
-                pub_mqtt(jsonrow)
-                
-        else:
-            print('reading is failed')
-        print("Going to sleep for a while...")
-        cmd_set_sleep(1)
-        time.sleep(60 if result_values else 1)
+                if MQTT_HOST != '':
+                    print(jsonrow)
+                    pub_mqtt(jsonrow)
+                    
+            else:
+                print('reading is failed')
+            print("Going to sleep for a while...")
+            cmd_set_sleep(1)
+            time.sleep(60 if result_values else 1)
+        except:
+            time.sleep(60 if result_values else 1)
+            continue
